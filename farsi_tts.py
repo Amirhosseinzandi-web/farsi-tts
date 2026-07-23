@@ -1,20 +1,21 @@
 """
-رابط ساده و فانکشنال (بدون کلاس) برای مدل فاین‌تیون‌شده Persian Chatterbox TTS —
-شامل تمام قابلیت‌های نوت‌بوک تست: chunking متن‌های بلند، retry روی قطع‌شدن زودهنگام
-یا نتیجه‌ی غلط، verification با Whisper، و merge کردن g2p_exceptions موقت.
+Simple, functional interface (no classes) for the fine-tuned Persian Chatterbox TTS
+model -- includes everything from the test notebook: chunking of long text, retry on
+early cutoff or wrong output, Whisper-based verification, and merging temporary
+g2p_exceptions.
 
-پیش‌نیاز: این فایل باید داخل پوشه chatterbox-finetuning اجرا بشه (importهای
-src.chatterbox_ و g2p_utils نسبی هستن).
+Requirement: this file must run from inside the chatterbox-finetuning folder
+(imports of src.chatterbox_ and g2p_utils are relative).
 
-استفاده‌ی ساده (مثل Piper):
+Basic usage (Piper-style):
     import os
     os.chdir("chatterbox-finetuning")
     from farsi_tts import load_model, synthesize
 
     model = load_model("final_model")
-    synthesize(model, "سلام به همگی!", "test.wav")
+    synthesize(model, "Hello everyone!", "test.wav")
 
-استفاده‌ی کامل با همه‌ی گزینه‌ها:
+Full usage with all options:
     model = load_model(
         "final_model",
         g2p_exceptions={"مکث": "m a k s e"},
@@ -22,7 +23,7 @@ src.chatterbox_ و g2p_utils نسبی هستن).
     )
     result = synthesize(
         model,
-        "یک متن طولانی با چند جمله ...",
+        "A long text with several sentences ...",
         "out.wav",
         temperature=0.5,
         repetition_penalty=1.5,
@@ -46,10 +47,20 @@ _CLAUSE_SPLIT = re.compile(r"(?<=[،؛:])\s+")
 
 _captured_logs = []
 
+# Silence third-party noise by default; call enable_verbose_logs() if you want
+# to see the model's own warnings (e.g. forced-EOS diagnostics).
+logging.getLogger("src.chatterbox_.models.t3.inference.alignment_stream_analyzer").setLevel(logging.CRITICAL)
+
 
 class _CaptureHandler(logging.Handler):
+    """Captures forced-EOS warnings internally without printing them."""
     def emit(self, record):
         _captured_logs.append(record.getMessage())
+
+
+def enable_verbose_logs():
+    """Optional: re-enable the model's internal warning logs at INFO level."""
+    logging.getLogger("src.chatterbox_.models.t3.inference.alignment_stream_analyzer").setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------- load_model
@@ -61,17 +72,19 @@ def load_model(
     g2p_exceptions=None,
     verification=True,
     whisper_model="openai/whisper-small",
+    verbose=False,
 ):
     """
-    مدل رو یک‌بار لود می‌کنه و یک دیکشنری برمی‌گردونه که به synthesize() پاس می‌دی.
+    Loads the model once and returns a state dict to pass into synthesize().
 
-    final_model_dir : مسیر پوشه final_model
-    audio_prompt_path : اگه بخوای به‌جای صدای داخل final_model از یک wav دیگه
-        استفاده کنی؛ پیش‌فرض None یعنی از voice_reference.wav داخل خودش استفاده کن
-    g2p_exceptions : دیکشنری اختیاری {کلمه فارسی: تلفظ آوایی} که روی
-        g2p_exceptions.json بسته‌شده داخل final_model اضافه (merge) می‌شه
-    verification : اگه True باشه هر تکه‌ی صدا با Whisper چک می‌شه که درست تولید
-        شده یا نه؛ برای سرعت بیشتر می‌تونی False بذاری
+    final_model_dir : path to the final_model folder
+    audio_prompt_path : optional wav to use instead of the voice bundled inside
+        final_model_dir; default None uses voice_reference.wav from inside it
+    g2p_exceptions : optional dict {persian_word: phonemic_form} merged on top
+        of the g2p_exceptions.json bundled in final_model_dir
+    verification : if True, each audio chunk is checked against the text with
+        Whisper; set False for faster (but less reliable) generation
+    verbose : if True, prints minimal progress messages in English
     """
     from src.chatterbox_.tts import ChatterboxTTS
     from src.chatterbox_.models.t3.t3 import T3
@@ -82,7 +95,7 @@ def load_model(
     with open(os.path.join(final_model_dir, "export_manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
 
-    # g2p_utils.py و g2p_exceptions.json باید کنار همین اسکریپت (working dir) باشن
+    # g2p_utils.py and g2p_exceptions.json need to sit next to this script (working dir)
     src_g2p = os.path.join(final_model_dir, "g2p_utils.py")
     if not os.path.exists("g2p_utils.py") and os.path.exists(src_g2p):
         shutil.copy(src_g2p, "g2p_utils.py")
@@ -103,6 +116,9 @@ def load_model(
 
     from g2p_utils import to_phonemic, normalize_only
 
+    if verbose:
+        print(f"Loading model from {final_model_dir} on {device}...")
+
     cfg = TrainConfig()
     model = ChatterboxTTS.from_local(cfg.model_dir, device=device)
 
@@ -120,7 +136,7 @@ def load_model(
     if audio_prompt_path is None and manifest.get("has_voice_reference"):
         audio_prompt_path = os.path.join(final_model_dir, "voice_reference.wav")
 
-    # برای تشخیص forced-EOS (قطع‌شدن زودهنگام به‌خاطر anti-repetition guard)
+    # Needed to detect forced-EOS (early cutoff from the anti-repetition guard)
     logging.getLogger(
         "src.chatterbox_.models.t3.inference.alignment_stream_analyzer"
     ).addHandler(_CaptureHandler())
@@ -128,12 +144,17 @@ def load_model(
     asr = None
     if verification:
         from transformers import pipeline
+        if verbose:
+            print(f"Loading verification model ({whisper_model})...")
         asr = pipeline(
             "automatic-speech-recognition",
             model=whisper_model,
             device=0 if device == "cuda" else -1,
             generate_kwargs={"language": "fa", "task": "transcribe"},
         )
+
+    if verbose:
+        print("Model ready.")
 
     return {
         "model": model,
@@ -142,10 +163,11 @@ def load_model(
         "normalize_only": normalize_only,
         "asr": asr,
         "device": device,
+        "verbose": verbose,
     }
 
 
-# ------------------------------------------------------------ helper: کیفیت
+# ---------------------------------------------------------------- quality helpers
 
 def _edit_distance(a, b):
     prev = list(range(len(b) + 1))
@@ -179,7 +201,7 @@ def _transcribe(state, wav_tensor):
     return state["asr"]({"array": audio_np, "sampling_rate": 16000})["text"]
 
 
-# --------------------------------------------------------- helper: chunking
+# ---------------------------------------------------------------- chunking helpers
 
 def _split_into_chunks(text, max_words=22, min_words=3):
     sentences = [s.strip() for s in _SENT_SPLIT.split(text.strip()) if s.strip()]
@@ -224,7 +246,7 @@ def _pause_ms_for(chunk_text, sentence_pause_ms, clause_pause_ms, split_pause_ms
     return split_pause_ms
 
 
-# --------------------------------------------------- هسته: تولید هر تکه با retry
+# ---------------------------------------------------------------- core: generate one chunk with retry
 
 def _generate_chunk(state, chunk_text, max_retries, max_cer, generation_kwargs):
     model = state["model"]
@@ -256,17 +278,19 @@ def _generate_chunk(state, chunk_text, max_retries, max_cer, generation_kwargs):
                 cer = _compute_cer(ref, _clean_for_cer(state, hyp))
                 content_ok = cer <= max_cer
             except Exception:
-                pass  # اگه verification خطا داد، همون خروجی رو قبول کن
+                pass  # if verification errors out, accept this attempt as-is
 
         ok = eos_ok and content_ok
         best_wav = wav
+        if state["verbose"] and not ok:
+            print(f"  retry {attempt + 1}/{max_retries}: eos_ok={eos_ok}, content_ok={content_ok}")
         if ok:
             break
 
     return best_wav, ok, attempt + 1, cer, phonemic
 
 
-# ------------------------------------------------------------------- synthesize
+# ---------------------------------------------------------------- synthesize
 
 def synthesize(
     state,
@@ -282,18 +306,21 @@ def synthesize(
     **generation_kwargs,
 ):
     """
-    یک متن (کوتاه یا بلند) رو به گفتار تبدیل می‌کنه و در out_path ذخیره می‌کنه:
-      - متن به تکه‌های جمله‌ای/بندی تقسیم می‌شه (مثل نوت‌بوک اصلی)
-      - هر تکه تولید و در صورت قطع‌شدن زودهنگام (forced-EOS) یا -اگه
-        verification روشن باشه- نامطابقت با Whisper، دوباره تولید می‌شه
-      - همه‌ی تکه‌ها با مکث مناسب بین‌شون به هم چسبونده می‌شن
+    Converts a text (short or long) to speech and saves it to out_path:
+      - text is split into sentence/clause-sized chunks (same as the main notebook)
+      - each chunk is generated and, on early cutoff (forced-EOS) or -- if
+        verification is on -- a mismatch with Whisper, retried
+      - all chunks are concatenated with an appropriate pause between them
 
-    generation_kwargs مستقیم به model.generate می‌ره، مثلاً:
+    generation_kwargs are passed straight to model.generate, e.g.:
         synthesize(model, text, "out.wav", temperature=0.5, repetition_penalty=1.5)
 
-    خروجی یک دیکشنری با جزییات هر تکه (متن، phonemic، تعداد تلاش، cer) برمی‌گردونه.
+    Returns a dict with per-chunk details (text, phonemic, attempt count, cer).
     """
     chunks_text = _split_into_chunks(text, max_words=max_words, min_words=min_words)
+
+    if state["verbose"]:
+        print(f"Generating: {text[:60]}{'...' if len(text) > 60 else ''} ({len(chunks_text)} chunk(s))")
 
     wav_parts, chunk_infos = [], []
     for i, chunk_text in enumerate(chunks_text):
@@ -312,17 +339,21 @@ def synthesize(
     final_wav = torch.cat(wav_parts, dim=-1) if wav_parts else torch.zeros(1, 1)
     ta.save(out_path, final_wav, state["model"].sr)
 
+    ok_overall = all(c["ok"] for c in chunk_infos) if chunk_infos else False
+    if state["verbose"]:
+        print(f"Done: ok={ok_overall} -> {out_path}")
+
     return {
         "text": text,
         "out": out_path,
         "num_chunks": len(chunks_text),
-        "ok": all(c["ok"] for c in chunk_infos) if chunk_infos else False,
+        "ok": ok_overall,
         "chunks": chunk_infos,
     }
 
 
 def synthesize_batch(state, texts, out_dir, **kwargs):
-    """چند متن رو پشت سر هم synthesize می‌کنه؛ برای هر کدوم out_dir/out_{i}.wav می‌سازه."""
+    """Synthesizes multiple texts in sequence; writes out_dir/out_{i}.wav for each."""
     os.makedirs(out_dir, exist_ok=True)
     results = []
     for i, text in enumerate(texts):

@@ -100,19 +100,32 @@ def load_model(
     if not os.path.exists("g2p_utils.py") and os.path.exists(src_g2p):
         shutil.copy(src_g2p, "g2p_utils.py")
 
+    # Merge pronunciation exceptions, lowest to highest priority:
+    #   1. bundled inside final_model_dir (the project's shared list)
+    #   2. this repo's g2p_exceptions.json (the maintained, growing list)
+    #   3. the per-call g2p_exceptions argument (rare, user override)
     exc_src = os.path.join(final_model_dir, "g2p_exceptions.json")
-    exc_dst = "g2p_exceptions.json"
-    if os.path.exists(exc_src) and not os.path.exists(exc_dst):
-        shutil.copy(exc_src, exc_dst)
+    exc_dst = "g2p_exceptions.json"  # where g2p_utils reads it from
+    exceptions = {"text_substitutions": {}, "phonemic_overrides": {}}
+    if os.path.exists(exc_src):
+        with open(exc_src, encoding="utf-8") as f:
+            exceptions = json.load(f)
+
+    _repo_exc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "g2p_exceptions.json")
+    if os.path.exists(_repo_exc):
+        with open(_repo_exc, encoding="utf-8") as f:
+            repo_exc = json.load(f)
+        exceptions.setdefault("text_substitutions", {}).update(
+            repo_exc.get("text_substitutions", {}))
+        exceptions.setdefault("phonemic_overrides", {}).update(
+            repo_exc.get("phonemic_overrides", {}))
 
     if g2p_exceptions:
-        exceptions = {"text_substitutions": {}, "phonemic_overrides": {}}
-        if os.path.exists(exc_dst):
-            with open(exc_dst, encoding="utf-8") as f:
-                exceptions = json.load(f)
         exceptions.setdefault("phonemic_overrides", {}).update(g2p_exceptions)
-        with open(exc_dst, "w", encoding="utf-8") as f:
-            json.dump(exceptions, f, ensure_ascii=False, indent=2)
+
+    with open(exc_dst, "w", encoding="utf-8") as f:
+        json.dump(exceptions, f, ensure_ascii=False, indent=2)
+
 
     from g2p_utils import to_phonemic, normalize_only
 

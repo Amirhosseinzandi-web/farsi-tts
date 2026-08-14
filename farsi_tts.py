@@ -1,5 +1,5 @@
 """
-Simple, functional interface (no classes) for the fine-tuned Persian Chatterbox TTS
+Simple, functional interface for the fine-tuned Persian Chatterbox TTS
 model -- includes everything from the test notebook: chunking of long text, retry on
 early cutoff or wrong output, Whisper-based verification, and merging temporary
 g2p_exceptions.

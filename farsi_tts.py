@@ -7,7 +7,7 @@ g2p_exceptions.
 Requirement: this file must run from inside the chatterbox-finetuning folder
 (imports of src.chatterbox_ and g2p_utils are relative).
 
-Basic usage (Piper-style):
+Basic usage:
     import os
     os.chdir("chatterbox-finetuning")
     from farsi_tts import load_model, synthesize

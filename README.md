@@ -9,6 +9,7 @@ A **full fine-tune (FFT)** of the [Chatterbox Multilingual](https://huggingface.
 
 Raw Persian text in, speech out. **No G2P, no phonemes** — the official multilingual tokenizer already covers Persian graphemes.
 > Persian text-to-speech model — provide raw text, get speech. Details and limitations: [Model card on Hugging Face](https://huggingface.co/amirzandi/Chatterbox-Persian-TTS).
+
 **The weights (~2.14GB) live on Hugging Face** → [amirzandi/Chatterbox-Persian-TTS](https://huggingface.co/amirzandi/Chatterbox-Persian-TTS) — this repo hosts the notebook and references (GitHub LFS free quota cannot host the checkpoint).
 
 ## 🎧 Ready-made voices — then make your own

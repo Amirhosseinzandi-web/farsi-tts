@@ -10,7 +10,7 @@ A **full fine-tune (FFT)** of the [Chatterbox Multilingual](https://huggingface.
 Raw Persian text in, speech out. **No G2P, no phonemes** — the official multilingual tokenizer already covers Persian graphemes.
 > Persian text-to-speech model — provide raw text, get speech. Details and limitations: [Model card on Hugging Face](https://huggingface.co/amirzandi/Chatterbox-Persian-TTS).
 
-**The weights (~2.14GB) live on Hugging Face** → [amirzandi/Chatterbox-Persian-TTS](https://huggingface.co/amirzandi/Chatterbox-Persian-TTS) — this repo hosts the notebook and references (GitHub LFS free quota cannot host the checkpoint).
+**The weights (~2.14GB) live on Hugging Face** → [amirzandi/Chatterbox-Persian-TTS](https://huggingface.co/amirzandi/Chatterbox-Persian-TTS) — this repo hosts references only (GitHub LFS free quota cannot host the checkpoint); the inference notebook lives on Colab (see below).
 
 ## 🎧 Ready-made voices — then make your own
 
@@ -25,7 +25,7 @@ Anything else? **Generate it yourself** in the ready Colab notebook (zero config
 
 **→ [Open the inference notebook on Colab](https://colab.research.google.com/drive/12OU6ynF9b7gOVSRn2HHG8dLgSwBPRIkt)**
 
-The same notebook file lives in this repo: [farsi_tts_fft_lora_inference.ipynb](farsi_tts_fft_lora_inference.ipynb).
+The notebook is hosted only on Colab (linked above) — there is no `.ipynb` file in this repo.
 
 ## 💻 Minimal usage
 
@@ -66,7 +66,7 @@ The released checkpoint is the most stable point of the training run; later chec
 
 | File | Status |
 |---|---|
-| `farsi_tts_fft_lora_inference.ipynb` | **current** — daily inference (FFT or LoRA), chunking, best-of-N retry, Whisper check. Also on [Colab](https://colab.research.google.com/drive/12OU6ynF9b7gOVSRn2HHG8dLgSwBPRIkt). |
+| `farsi_tts_fft_lora_inference.ipynb` | **current** — daily inference (FFT or LoRA), chunking, best-of-N retry, Whisper check. Hosted only on [Colab](https://colab.research.google.com/drive/12OU6ynF9b7gOVSRn2HHG8dLgSwBPRIkt); not stored in this repo. |
 | `farsi_tts.py` | ⚠️ **legacy** — helper from an earlier experiment. It loads a `final_model/` folder and is **not compatible** with the released weights. Kept for reference. |
 | `g2p_exceptions.json` | legacy, used only by `farsi_tts.py`. |
 
@@ -76,4 +76,4 @@ The full training pipeline (preprocess → cache → FFT/LoRA → eval) runs on 
 
 - Fine-tuned weights: **MIT** — any use permitted, with attribution
 - Base model: [ResembleAI/chatterbox](https://huggingface.co/ResembleAI/chatterbox) (MIT)
-- Training data: [Thomcles/Persian-Farsi-Speech](https://huggingface.co/datasets/Thomcles/Persian-Farsi-Speech) (Apache-2.0) — special thanks to **Thomcles** for releasing 417h of Persian speech
+- Training data: [Thomcles/Persian-Farsi-Speech](https://huggingface.co/datasets/Thomcles/Persian-Farsi-Speech) (CC BY 4.0) — special thanks to **Thomcles** for releasing 417h of Persian speech
